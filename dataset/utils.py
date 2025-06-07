@@ -16,6 +16,9 @@ def build_dataset(args):
                                  transform=transforms.Compose([transforms.Resize(224),transforms.ToTensor()]))
         label2class = train_dataset.classes
         cal_test_dataset = Subset(cal_test_dataset, range(0, 200))
+        print(train_dataset.class_to_idx)
+        print(train_dataset.classes)
+        print(list(train_dataset.class_to_idx.keys()))
     elif dataset_name == "cifar100":
         train_transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -49,21 +52,22 @@ def build_dataset(args):
         ])
 
         # Load datasets
-        #train_dataset = torchvision.datasets.ImageFolder(
-         #   root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
-          #  transform=train_transform
-        #)
+        train_dataset = torchvision.datasets.ImageFolder(
+            root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
+            transform=train_transform
+        )
 
-        #cal_test_dataset = torchvision.datasets.ImageFolder(
-         #   root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
-          #  transform=val_transform
-        #)
+        cal_test_dataset = torchvision.datasets.ImageFolder(
+            root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
+            transform=val_transform
+        )
+        label2class = train_dataset.classes
         #label2class = ImageNet.__class__
-        train_dataset = ImageNet(root="/mnt/sharedata/ssd3/common/datasets/imagenet", download=False,
-                                 train=True, transform=train_transform)
-        cal_test_dataset = ImageNet(root='/mnt/sharedata/ssd3/common/datasets/imagenet', download=False,
-                                    train=False,
-                                    transform=val_transform)
+        #train_dataset = ImageNet(root="/mnt/sharedata/ssd3/common/datasets/imagenet", download=False,
+         #                        train=True, transform=train_transform)
+        #cal_test_dataset = ImageNet(root='/mnt/sharedata/ssd3/common/datasets/imagenet', download=False,
+         #                           train=False,
+          #                          transform=val_transform)
 
     if args.algorithm != "standard":
         cal_size = int(len(cal_test_dataset) * args.cal_ratio)

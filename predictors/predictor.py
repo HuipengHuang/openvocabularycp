@@ -21,19 +21,23 @@ class Predictor:
 
 
     def learn_v(self, images):
-        v = nn.Parameter(torch.ones(size=(1, self.template_embedding.shape[-1]), device="cuda"), requires_grad=True)
+        v = nn.Parameter(torch.rand(size=(1, self.template_embedding.shape[-1]), device="cuda"), requires_grad=True)
         optimizer = torch.optim.Adam([v], lr=1e-1)
 
         image_features = self.model.encode_image(images).clone().detach().requires_grad_(False)
 
-        for i in range(200):
+        for i in range(100):
             template_embedding = self.template_embedding.clone().detach().requires_grad_(False)
             template_embedding[0, 5] = v[0]
             text_inputs = template_embedding
-            #print(text_inputs[0, 5].requires_grad, text_inputs.requires_grad)
 
             text_features = self.model.encode_x(text_inputs)
-            cos = torch.sum(image_features * text_features) / (torch.norm(image_features) * torch.norm(text_features))
+
+            cos = torch.cosine_similarity(image_features, text_features, dim=-1)
+
+            if i == 100:
+                print(cos)
+                print()
             loss = -cos
             optimizer.zero_grad()
             loss.backward()
@@ -59,8 +63,8 @@ class Predictor:
 
             class_name = self.label2class[target.item()]
             class_id = clip.tokenize(class_name)[0, 1]
-            v_class = self.model.token_embedding(torch.tensor(class_id, device="cuda")).clone().detach()
-            score = 1 - torch.sum(v * v_class) / (torch.norm(v) * torch.norm(v_class))
+            v_class = self.model.token_embedding(torch.tensor(class_id.item(), device="cuda"))
+            score = 1 - torch.cosine_similarity(v, v_class, dim=-1)
 
             cal_score = torch.cat((cal_score, score.view(1, -1)), 0)
         N = cal_score.shape[0]

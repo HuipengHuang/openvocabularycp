@@ -1,7 +1,8 @@
 import clip
 import torch
 
-model, _ = clip.load("ViT-B/16")
-word = "dog"
-tokenized_word = clip.tokenize([word, "I have a dogs"])
-print(torch.argmax(tokenized_word, dim=-1))
+model, _ = clip.load("RN50")
+tokenized_word = clip.tokenize(["I have a dog"]).to("cuda")
+print(tokenized_word.shape)
+print(model.token_embedding(tokenized_word).shape)
+print(model.encode_text(tokenized_word).shape)

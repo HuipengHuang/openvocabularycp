@@ -353,7 +353,8 @@ class CLIP(nn.Module):
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
-
+        print(text.argmax(dim=-1))
+        print(x[torch.arange(x.shape[0]), text.argmax(dim=-1)].shape)
         return x
 
     def encode_x(self, x):
@@ -367,7 +368,7 @@ class CLIP(nn.Module):
 
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[:, :6] @ self.text_projection
+        x = x[:, 5] @ self.text_projection
 
         return x
 
