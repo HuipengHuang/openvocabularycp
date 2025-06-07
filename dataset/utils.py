@@ -29,8 +29,8 @@ def build_dataset(args):
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
 
-        train_dataset = CIFAR100(root="./data/dataset", download=True, train=True, transform=train_transform)
-        cal_test_dataset = CIFAR100(root='./data/dataset', download=True, train=False,
+        train_dataset = CIFAR100(root="/mnt/sharedata/ssd3/common/datasets/cifar-100-python", download=False, train=True, transform=train_transform)
+        cal_test_dataset = CIFAR100(root='/mnt/sharedata/ssd3/common/datasets/cifar-100-python', download=False, train=False,
                                  transform=val_transform)
         label2class = train_dataset.classes
     elif dataset_name == "imagenet":
@@ -49,16 +49,22 @@ def build_dataset(args):
         ])
 
         # Load datasets
-        train_dataset = torchvision.datasets.ImageFolder(
-            root="/data/dataset/imagenet/images/train",
-            transform=train_transform
-        )
+        #train_dataset = torchvision.datasets.ImageFolder(
+         #   root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
+          #  transform=train_transform
+        #)
 
-        cal_test_dataset = torchvision.datasets.ImageFolder(
-            root="/data/dataset/imagenet/images/val",
-            transform=val_transform
-        )
+        #cal_test_dataset = torchvision.datasets.ImageFolder(
+         #   root="/mnt/sharedata/ssd3/common/datasets/imagenet/images/train",
+          #  transform=val_transform
+        #)
         #label2class = ImageNet.__class__
+        train_dataset = ImageNet(root="/mnt/sharedata/ssd3/common/datasets/imagenet", download=False,
+                                 train=True, transform=train_transform)
+        cal_test_dataset = ImageNet(root='/mnt/sharedata/ssd3/common/datasets/imagenet', download=False,
+                                    train=False,
+                                    transform=val_transform)
+
     if args.algorithm != "standard":
         cal_size = int(len(cal_test_dataset) * args.cal_ratio)
         test_size = len(cal_test_dataset) - cal_size
