@@ -5,22 +5,22 @@ from common.utils import set_seed
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--num_runs", type=int, default=1, help="Number of runs")
 parser.add_argument("--model", type=str, default="resnet50", help='Choose neural network architecture.')
-parser.add_argument("--dataset", type=str, default="cifar100", choices=["cifar10", "cifar100", "imagenet"],
+parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100", "imagenet"],
                     help="Choose dataset for training.")
 parser.add_argument('--seed', type=int, default=None)
-parser.add_argument("--pretrained", default="False", type=str, choices=["True", "False"])
 parser.add_argument("--save", default="False", choices=["True", "False"], type=str)
 parser.add_argument("--algorithm",'-alg', default="cp", choices=["standard", "uatr", "cp"],
                     help="Uncertainty aware training use uatr. Otherwise use standard")
-parser.add_argument("--load", default="False", type=str, choices=["True", "False"])
 parser.add_argument("--predictor", default=None, type=str, choices=["local", "cluster"])
 parser.add_argument("--save_model", default=None, type=str, choices=["True", "False"])
+
 
 #  Training configuration
 parser.add_argument("--optimizer", type=str, default="sgd", choices=["sgd", "adam"], help="Choose optimizer.")
 parser.add_argument("--learning_rate", "-lr", type=float, default=1e-1, help="Initial learning rate for optimizer")
-parser.add_argument("--epochs", '-e', type=int, default=100, help='Number of epochs to train')
+parser.add_argument("--epochs", '-e', type=int, default=0, help='Number of epochs to train')
 parser.add_argument("--batch_size",'-bsz', type=int, default=32)
 parser.add_argument("--momentum", type=float, default=0, help='Momentum')
 parser.add_argument("--weight_decay", type=float, default=0, help='Weight decay')

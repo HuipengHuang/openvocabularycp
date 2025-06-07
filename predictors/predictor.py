@@ -2,40 +2,71 @@ import numpy as np
 from scores.utils import get_score
 import torch
 import math
+import torch.nn as nn
+import clip
 
 
 class Predictor:
-    def __init__(self, args, net):
+    def __init__(self, args, model):
         self.score_function = get_score(args)
-
-        self.net = net
+        self.model = model
         self.threshold = None
         self.alpha = args.alpha
-        self.device = next(net.parameters()).device
+        self.device = next(model.parameters()).device
         self.args = args
+        self.label2class = args.label2class
+        self.template_embedding = self.model.token_embedding(clip.tokenize([f"A photo of a dog"]).to("cuda"))
+        self.normalized_token_embedding = self.model.token_embedding.weight.data.clone().detach()
+        self.normalized_token_embedding = self.normalized_token_embedding / self.normalized_token_embedding.norm(dim=-1, keepdim=True)
+
+
+    def learn_v(self, images):
+        v = nn.Parameter(torch.ones(size=(1, self.template_embedding.shape[-1]), device="cuda"), requires_grad=True)
+        optimizer = torch.optim.Adam([v], lr=1e-1)
+
+        image_features = self.model.encode_image(images).clone().detach().requires_grad_(False)
+
+        for i in range(200):
+            template_embedding = self.template_embedding.clone().detach().requires_grad_(False)
+            template_embedding[0, 5] = v[0]
+            text_inputs = template_embedding
+            #print(text_inputs[0, 5].requires_grad, text_inputs.requires_grad)
+
+            text_features = self.model.encode_x(text_inputs)
+            cos = torch.sum(image_features * text_features) / (torch.norm(image_features) * torch.norm(text_features))
+            loss = -cos
+            optimizer.zero_grad()
+            loss.backward()
+
+            optimizer.step()
+        return v
 
     def calibrate(self, cal_loader, alpha=None):
         """ Input calibration dataloader.
             Compute scores for all the calibration data and take the (1 - alpha) quantile."""
-        self.net.eval()
-        with torch.no_grad():
-            if alpha is None:
-                alpha = self.alpha
-            cal_score = torch.tensor([], device=self.device)
-            for data, target in cal_loader:
-                data = data.to(self.device)
-                target = target.to(self.device)
+        self.model.eval()
 
-                logits = self.net(data)
+        if alpha is None:
+            alpha = self.alpha
 
-                prob = torch.softmax(logits, dim=1)
-                batch_score = self.score_function.compute_target_score(prob, target)
+        cal_score = torch.tensor([], device=self.device)
+        #  Assume batch size is 1
+        for images, target in cal_loader:
+            images = images.to(self.device)
+            target = target.to(self.device)
 
-                cal_score = torch.cat((cal_score, batch_score), 0)
-            N = cal_score.shape[0]
-            threshold = torch.quantile(cal_score, math.ceil((1 - alpha) * (N + 1)) / N, dim=0)
-            self.threshold = threshold
-            return threshold
+            v = self.learn_v(images)
+
+            class_name = self.label2class[target.item()]
+            class_id = clip.tokenize(class_name)[0, 1]
+            v_class = self.model.token_embedding(torch.tensor(class_id, device="cuda")).clone().detach()
+            score = 1 - torch.sum(v * v_class) / (torch.norm(v) * torch.norm(v_class))
+
+            cal_score = torch.cat((cal_score, score.view(1, -1)), 0)
+        N = cal_score.shape[0]
+        threshold = torch.quantile(cal_score, math.ceil((1 - alpha) * (N + 1)) / N, dim=0)
+        self.threshold = threshold
+        return threshold
 
     def calibrate_batch_logit(self, logits, target, alpha):
         """Design for conformal training, which needs to compute threshold in every batch"""
@@ -47,61 +78,48 @@ class Predictor:
     def evaluate(self, test_loader):
         """Must be called after calibration.
         Output a dictionary containing Top1 Accuracy, Coverage and Average Prediction Set Size."""
-        self.net.eval()
-        if self.threshold is not None:
-            num_classes = test_loader.dataset.num_classes
-            with torch.no_grad():
-                total_accuracy = 0
-                total_coverage = 0
-                total_prediction_set_size = 0
-                class_coverage = [0 for i in range(num_classes)]
-                class_size = [0 for i in range(num_classes)]
-                total_samples = 0
+        self.model.eval()
+        if self.args.algorithm == "cp":
+            total_coverage = 0
+            total_prediction_set_size = 0
+            total_samples = 0
 
-                for data, target in test_loader:
-                    data, target = data.to(self.device), target.to(self.device)
-                    batch_size = target.shape[0]
-                    total_samples += batch_size
+            for image, target in test_loader:
+                image, target = image.to(self.device), target.to(self.device)
+                total_samples += target.shape[0]
 
-                    logit = self.net(data)
-                    prob = torch.softmax(logit, dim=-1)
-                    prediction = torch.argmax(prob, dim=-1)
-                    total_accuracy += (prediction == target).sum().item()
+                v = self.learn_v(image)
 
-                    batch_score = self.score_function(prob)
-                    prediction_set = (batch_score <= self.threshold).to(torch.int)
+                cos_tensor = self.normalized_token_embedding @ (v / v.norm(dim=-1, keepdim=True)).view(-1)
+                score_tensor = 1 - cos_tensor
 
-                    target_prediction_set = prediction_set[torch.arange(batch_size), target]
-                    total_coverage += target_prediction_set.sum().item()
+                prediction_set = (score_tensor <= self.threshold).to(torch.int)
 
-                    total_prediction_set_size += prediction_set.sum().item()
+                class_name = self.label2class[target.item()]
+                class_id = clip.tokenize(class_name)[0, 1]
 
-                    for i in range(prediction_set.shape[0]):
-                        class_coverage[target[i]] += 1
-                        class_size[target[i]] += 1
+                if prediction_set[class_id] == 1:
+                    total_coverage += 1
+
+                total_prediction_set_size += prediction_set.sum().item()
 
 
-                accuracy = total_accuracy / total_samples
-                coverage = total_coverage / total_samples
-                avg_set_size = total_prediction_set_size / total_samples
-                class_coverage_gap = np.array(class_coverage) / np.array(class_size)
-                class_coverage_gap = np.sum(np.abs(class_coverage_gap - (1 - self.alpha))) / num_classes
-                result_dict = {
-                    f"{self.args.score}_Top1Accuracy": accuracy,
-                    f"{self.args.score}_AverageSetSize": avg_set_size,
-                    f"{self.args.score}_Coverage": coverage,
-                    f"{self.args.score}_class_coverage_gap": class_coverage_gap,
+            coverage = total_coverage / total_samples
+            avg_set_size = total_prediction_set_size / total_samples
+            result_dict = {
+                f"AverageSetSize": avg_set_size,
+                f"Coverage": coverage,
                 }
         else:
             total_samples = 0
             total_accuracy = 0
             with torch.no_grad():
-                for data, target in test_loader:
-                    data, target = data.to(self.device), target.to(self.device)
+                for image, target in test_loader:
+                    image, target = image.to(self.device), target.to(self.device)
                     batch_size = target.shape[0]
                     total_samples += batch_size
 
-                    logit = self.net(data)
+                    logit = self.model(image)
                     prob = torch.softmax(logit, dim=-1)
                     prediction = torch.argmax(prob, dim=-1)
                     total_accuracy += (prediction == target).sum().item()

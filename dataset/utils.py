@@ -4,17 +4,19 @@ from torch.utils.data import DataLoader, Subset, random_split
 import torch
 from torchvision.datasets import CIFAR100
 from torchvision.datasets import CIFAR10
+from torchvision.datasets import ImageNet
+
 
 def build_dataset(args):
     dataset_name = args.dataset
 
     if dataset_name == "cifar10":
-        num_class = 10
-        train_dataset = CIFAR10(root='./data/dataset', train=True, download=False,transform=transforms.Compose([transforms.ToTensor()]))
-        cal_test_dataset = CIFAR10(root='./data/dataset', train=False, download=False,
-                                 transform=transforms.Compose([transforms.ToTensor()]))
+        train_dataset = CIFAR10(root='./data/dataset', train=True, download=True, transform=transforms.Compose([transforms.Resize(224),transforms.ToTensor()]))
+        cal_test_dataset = CIFAR10(root='./data/dataset', train=True, download=False,
+                                 transform=transforms.Compose([transforms.Resize(224),transforms.ToTensor()]))
+        label2class = train_dataset.classes
+        cal_test_dataset = Subset(cal_test_dataset, range(0, 200))
     elif dataset_name == "cifar100":
-        num_class = 100
         train_transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
@@ -30,9 +32,8 @@ def build_dataset(args):
         train_dataset = CIFAR100(root="./data/dataset", download=True, train=True, transform=train_transform)
         cal_test_dataset = CIFAR100(root='./data/dataset', download=True, train=False,
                                  transform=val_transform)
-
+        label2class = train_dataset.classes
     elif dataset_name == "imagenet":
-        num_class = 1000
         train_transform = transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
@@ -57,15 +58,15 @@ def build_dataset(args):
             root="/data/dataset/imagenet/images/val",
             transform=val_transform
         )
-
+        #label2class = ImageNet.__class__
     if args.algorithm != "standard":
         cal_size = int(len(cal_test_dataset) * args.cal_ratio)
         test_size = len(cal_test_dataset) - cal_size
         cal_dataset, test_dataset = random_split(cal_test_dataset, [cal_size, test_size])
     else:
         cal_dataset, test_dataset = None, cal_test_dataset
-    args.num_classes = num_class
-    return train_dataset, cal_dataset, test_dataset, num_class
+    args.label2class = label2class
+    return train_dataset, cal_dataset, test_dataset, label2class
 
 
 def split_dataloader(original_dataloader, split_ratio=0.5):

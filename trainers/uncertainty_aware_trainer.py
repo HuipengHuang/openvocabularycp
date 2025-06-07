@@ -19,7 +19,7 @@ class UncertaintyAwareTrainer(Trainer):
         """This method is modified because
          uncertainty-aware training requires randomly split the training data into two disjoint set."""
         pred_set, calibrate_set = utils.split_dataloader(data_loader, 0.5)
-        self.net.train()
+        self.model.train()
         if self.adapter is None:
             for epoch in range(epochs):
                 pred_loader = DataLoader(pred_set, batch_size=self.batch_size, shuffle=True, drop_last=True)
