@@ -1,4 +1,4 @@
-import numpy as np
+from tqdm import tqdm
 from scores.utils import get_score
 import torch
 import math
@@ -51,7 +51,7 @@ class Predictor:
 
         cal_score = torch.tensor([], device=self.device)
         #  Assume batch size is 1
-        for images, target in cal_loader:
+        for images, target in tqdm(cal_loader, desc="Calibrating"):
             images = images.to(self.device)
             target = target.to(self.device)
 
@@ -84,7 +84,7 @@ class Predictor:
             total_prediction_set_size = 0
             total_samples = 0
 
-            for image, target in test_loader:
+            for image, target in tqdm(test_loader, desc="Evaluating"):
                 image, target = image.to(self.device), target.to(self.device)
                 total_samples += target.shape[0]
 
