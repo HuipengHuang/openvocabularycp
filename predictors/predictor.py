@@ -23,18 +23,18 @@ class Predictor:
 
     def learn_v(self, images):
         v = nn.Parameter(torch.rand(size=(self.args.batch_size, self.template_embedding.shape[-1]), device="cuda", requires_grad=True), requires_grad=True)
-        optimizer = torch.optim.Adam([v], lr=1e-1)
+        optimizer = torch.optim.SGD([v], lr=1e-1)
 
         image_features = self.model.encode_image(images).clone().detach().requires_grad_(False)
 
-        for i in range(200):
+        for i in range(100):
             text_inputs = self.batch_template_embedding.clone().detach().requires_grad_(False)
             text_inputs[:, 5] = v
 
             text_features = self.model.encode_x(text_inputs)
             diagonal_cos_value = [torch.cosine_similarity(image_features[i], text_features[i], dim=-1) for i in range(text_features.size(0))]
 
-            loss = -sum(diagonal_cos_value) / self.args.batch_size
+            loss = -sum(diagonal_cos_value)
             optimizer.zero_grad()
             loss.backward()
 
@@ -91,10 +91,9 @@ class Predictor:
                 total_samples += target.shape[0]
 
                 v = self.learn_v(image)
-                print(v.shape)
                 cos_tensor = self.normalized_token_embedding @ (v / v.norm(dim=-1, keepdim=True)).view(-1, self.args.batch_size)
                 score_tensor = 1 - cos_tensor.T
-                print(score_tensor.shape)
+
                 prediction_set = (score_tensor <= self.threshold).to(torch.int)
 
                 class_name = self.label2class[target.clone().detach().cpu().numpy()]
