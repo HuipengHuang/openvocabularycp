@@ -16,29 +16,25 @@ class Predictor:
         self.args = args
         self.label2class = args.label2class
         self.template_embedding = self.model.token_embedding(clip.tokenize([f"A photo of a dog"]).to("cuda"))
+        self.batch_template_embedding = torch.cat([self.template_embedding for _ in range(args.batch_size)])
         self.normalized_token_embedding = self.model.token_embedding.weight.data.clone().detach()
         self.normalized_token_embedding = self.normalized_token_embedding / self.normalized_token_embedding.norm(dim=-1, keepdim=True)
 
 
     def learn_v(self, images):
-        v = nn.Parameter(torch.rand(size=(1, self.template_embedding.shape[-1]), device="cuda"), requires_grad=True)
+        v = nn.Parameter(torch.rand(size=(self.args.batch_size, self.template_embedding.shape[-1]), device="cuda", requires_grad=True), requires_grad=True)
         optimizer = torch.optim.Adam([v], lr=1e-1)
 
         image_features = self.model.encode_image(images).clone().detach().requires_grad_(False)
 
-        for i in range(100):
-            template_embedding = self.template_embedding.clone().detach().requires_grad_(False)
-            template_embedding[0, 5] = v[0]
-            text_inputs = template_embedding
+        for i in range(200):
+            text_inputs = self.batch_template_embedding.clone().detach().requires_grad_(False)
+            text_inputs[:, 5] = v
 
             text_features = self.model.encode_x(text_inputs)
+            diagonal_cos_value = [torch.cosine_similarity(image_features[i], text_features[i], dim=-1) for i in range(text_features.size(0))]
 
-            cos = torch.cosine_similarity(image_features, text_features, dim=-1)
-
-            if i == 100:
-                print(cos)
-                print()
-            loss = -cos
+            loss = -sum(diagonal_cos_value) / self.args.batch_size
             optimizer.zero_grad()
             loss.backward()
 
@@ -61,12 +57,14 @@ class Predictor:
 
             v = self.learn_v(images)
 
-            class_name = self.label2class[target.item()]
-            class_id = clip.tokenize(class_name)[0, 1]
-            v_class = self.model.token_embedding(torch.tensor(class_id.item(), device="cuda"))
-            score = 1 - torch.cosine_similarity(v, v_class, dim=-1)
+            class_name = self.label2class[target.detach().cpu().numpy()]
+            class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
 
-            cal_score = torch.cat((cal_score, score.view(1, -1)), 0)
+            v_class = self.model.token_embedding(class_id)
+
+            batch_score = 1 - torch.tensor([torch.cosine_similarity(v[i], v_class[i], dim=-1) for i in range(v.size(0))], device="cuda")
+
+            cal_score = torch.cat((cal_score, batch_score), 0)
         N = cal_score.shape[0]
         threshold = torch.quantile(cal_score, math.ceil((1 - alpha) * (N + 1)) / N, dim=0)
         self.threshold = threshold
@@ -93,17 +91,17 @@ class Predictor:
                 total_samples += target.shape[0]
 
                 v = self.learn_v(image)
-
-                cos_tensor = self.normalized_token_embedding @ (v / v.norm(dim=-1, keepdim=True)).view(-1)
-                score_tensor = 1 - cos_tensor
-
+                print(v.shape)
+                cos_tensor = self.normalized_token_embedding @ (v / v.norm(dim=-1, keepdim=True)).view(-1, self.args.batch_size)
+                score_tensor = 1 - cos_tensor.T
+                print(score_tensor.shape)
                 prediction_set = (score_tensor <= self.threshold).to(torch.int)
 
-                class_name = self.label2class[target.item()]
-                class_id = clip.tokenize(class_name)[0, 1]
+                class_name = self.label2class[target.clone().detach().cpu().numpy()]
+                class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
 
-                if prediction_set[class_id] == 1:
-                    total_coverage += 1
+                total_coverage += torch.sum(prediction_set[torch.arange(self.args.batch_size), class_id]).item()
+
 
                 total_prediction_set_size += prediction_set.sum().item()
 
