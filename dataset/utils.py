@@ -83,7 +83,7 @@ def build_cal_test_loader(args):
         raise NotImplementedError
 
     args.label2class = np.array(label2class)
-
+    args.num_classes = len(label2class)
     if args.algorithm == "standard":
         cal_loader, tune_loader= None, None
         test_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)

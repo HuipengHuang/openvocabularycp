@@ -45,26 +45,43 @@ class Predictor:
         """ Input calibration dataloader.
             Compute scores for all the calibration data and take the (1 - alpha) quantile."""
         self.model.eval()
-
         if alpha is None:
             alpha = self.alpha
 
-        cal_score = torch.tensor([], device=self.device)
-        #  Assume batch size is 1
-        for images, target in tqdm(cal_loader, desc="Calibrating"):
-            images = images.to(self.device)
-            target = target.to(self.device)
+        if self.args.algorithm == "cp":
+            cal_score = torch.tensor([], device=self.device)
+            #  Assume batch size is 1
+            for images, target in tqdm(cal_loader, desc="Calibrating"):
+                images = images.to(self.device)
+                target = target.to(self.device)
 
-            v = self.learn_v(images)
+                v = self.learn_v(images)
 
-            class_name = self.label2class[target.detach().cpu().numpy()]
-            class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
+                class_name = self.label2class[target.detach().cpu().numpy()]
+                class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
 
-            v_class = self.model.token_embedding(class_id)
+                v_class = self.model.token_embedding(class_id)
 
-            batch_score = 1 - torch.tensor([torch.cosine_similarity(v[i], v_class[i], dim=-1) for i in range(v.size(0))], device="cuda")
+                batch_score = 1 - torch.tensor([torch.cosine_similarity(v[i], v_class[i], dim=-1) for i in range(v.size(0))], device="cuda")
 
-            cal_score = torch.cat((cal_score, batch_score), 0)
+                cal_score = torch.cat((cal_score, batch_score), 0)
+        else:
+            with torch.no_grad():
+                text_feature = self.model.token_embedding(clip.tokenize([[f"A photo of a {self.args.label2class[i]}"] for i in range(self.args.num_classes) ]).to("cuda"))
+                text_feature = text_feature / text_feature.norm(dim=-1, keepdim=True)
+
+                cal_score = torch.tensor([], device=self.device)
+                for images, target in tqdm(cal_loader, desc="Calibrating"):
+                    images = images.to(self.device)
+                    target = target.to(self.device)
+                    image_features = self.model.encode_image(images)
+                    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+                    logits_per_image = (image_features @ text_feature.t()) * self.model.logit_scale.exp()
+                    probabilities = logits_per_image.softmax(dim=-1)
+                    batch_score = 1 - probabilities[torch.arange(images.shape[0]), target]
+                    cal_score = torch.cat([cal_score, batch_score], 0)
+
         N = cal_score.shape[0]
         threshold = torch.quantile(cal_score, math.ceil((1 - alpha) * (N + 1)) / N, dim=0)
         self.threshold = threshold
@@ -115,20 +132,21 @@ class Predictor:
             total_samples = 0
             total_accuracy = 0
             with torch.no_grad():
-                for image, target in test_loader:
-                    image, target = image.to(self.device), target.to(self.device)
-                    batch_size = target.shape[0]
-                    total_samples += batch_size
+                text_feature = self.model.encode_text(clip.tokenize(
+                    [f"A photo of a {self.args.label2class[i]}" for i in range(self.args.num_classes)]).to("cuda"))
+                text_feature = text_feature / text_feature.norm(dim=-1, keepdim=True)
 
-                    logit = self.model(image)
-                    prob = torch.softmax(logit, dim=-1)
-                    prediction = torch.argmax(prob, dim=-1)
-                    total_accuracy += (prediction == target).sum().item()
+                for images, target in tqdm(test_loader, desc="Evaluating"):
+                    images = images.to(self.device)
+                    target = target.to(self.device)
+                    total_samples += target.shape[0]
 
-                accuracy = total_accuracy / total_samples
-                result_dict = {
-                    f"{self.args.score}_Top1Accuracy": accuracy,
-                }
+                    image_features = self.model.encode_image(images)
+                    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
+                    logits_per_image = (image_features @ text_feature.t()) * self.model.logit_scale.exp()
+                    probabilities = logits_per_image.softmax(dim=-1)
+                    total_accuracy += torch.argmax(probabilities, dim=-1).eq(target).sum().item()
+                result_dict = {"Accuracy": total_accuracy / total_samples,}
         return result_dict
 
