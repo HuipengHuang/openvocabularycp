@@ -45,71 +45,69 @@ def save_model(args, net):
 
 
 def load_model(args, model):
-    """Load CLIP model weights from checkpoint with proper architecture handling"""
-    # Standard CLIP checkpoint naming pattern
-    pattern = os.path.join("./data", f"{args.dataset}_{args.model}*clip*.pth")
+    """Properly load CLIP model components"""
+    pattern = os.path.join("./data", f"{args.dataset}_{args.model}*clip*.pt")
     matching_files = glob.glob(pattern)
 
     if not matching_files:
         print(f"No CLIP checkpoint found matching {pattern}")
         return model
 
-    # Load most recent checkpoint
     latest_checkpoint = max(matching_files, key=os.path.getctime)
-    print(f"Loading CLIP model from {latest_checkpoint}")
 
     try:
-        # Load state dict to CPU first
         state_dict = torch.load(latest_checkpoint, map_location="cpu")
 
-        # Handle different CLIP components
-        if hasattr(model, 'visual') and hasattr(model, 'transformer'):
-            # Standard CLIP architecture (ViT or RN50)
-            model.load_state_dict(state_dict)
-        elif hasattr(model, 'visual'):
-            # Custom CLIP implementation with separate visual encoder
+        # Load visual encoder
+        if 'visual_state_dict' in state_dict:
             model.visual.load_state_dict(state_dict['visual_state_dict'])
-            model.text_projection.load_state_dict(state_dict['text_state_dict'])
-            model.logit_scale = state_dict['logit_scale']
-        elif hasattr(model, 'resnet'):
-            # Wrapped ResNet CLIP variant
-            model.resnet.load_state_dict(state_dict)
-        else:
-            # Generic model loading
-            model.load_state_dict(state_dict)
 
-        # Move model to target device
-        model = model.to(args.device)
-        print(f"Successfully loaded CLIP model to {args.device}")
+        # Load text projection (parameter)
+        if 'text_projection' in state_dict:
+            model.text_projection.data = state_dict['text_projection']
 
+        # Load logit scale
+        if 'logit_scale' in state_dict:
+            model.logit_scale.data = state_dict['logit_scale']
+
+        # Load text encoder if exists
+        if hasattr(model, 'transformer') and 'text_state_dict' in state_dict:
+            model.transformer.load_state_dict(state_dict['text_state_dict'])
+
+        print(f"Loaded CLIP model from {latest_checkpoint}")
         return model
 
     except Exception as e:
         print(f"Error loading CLIP model: {str(e)}")
-        # Return original model if loading fails
         return model
 
 
 def save_model(args, model):
+    """Properly save CLIP model components"""
     save_dir = "./data"
     os.makedirs(save_dir, exist_ok=True)
 
-    # Separate visual and text encoders
+    # Prepare state dictionary for CLIP
     state_dict = {
         'visual_state_dict': model.visual.state_dict(),
-        'text_state_dict': model.text_projection.state_dict(),
-        'logit_scale': model.logit_scale,
+        'text_projection': model.text_projection.data,  # Save as tensor
+        'logit_scale': model.logit_scale.data,
         'args': vars(args)
     }
 
+    # Handle text encoder if exists
+    if hasattr(model, 'transformer'):
+        state_dict['text_state_dict'] = model.transformer.state_dict()
+
     version = 0
     while True:
-        save_path = os.path.join(save_dir, f"clip_{args.model}_{version}.pt")
+        save_path = os.path.join(save_dir, f"{args.dataset}_{args.model}_clip{version}.pt")
         if not os.path.exists(save_path):
             break
         version += 1
 
     torch.save(state_dict, save_path)
+    print(f"Saved CLIP model to {save_path}")
 
 """import os
 from datetime import datetime
