@@ -11,7 +11,7 @@ def cp(args):
     for run in range(args.num_runs):
         cal_loader, test_loader = build_cal_test_loader(args)
 
-        trainer = get_trainer(args, 1)
+        trainer = get_trainer(args)
 
         if args.epochs and args.epochs > 0:
             train_dataloader = build_train_dataloader(args)
@@ -42,7 +42,7 @@ def standard(args):
     train_loader = build_train_dataloader(args)
     _, test_loader = build_cal_test_loader(args)
 
-    trainer = get_trainer(args, 1)
+    trainer = get_trainer(args)
 
     trainer.train(train_loader, args.epochs)
 

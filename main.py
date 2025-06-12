@@ -15,7 +15,7 @@ parser.add_argument("--algorithm",'-alg', default="cp", choices=["standard", "ua
                     help="Uncertainty aware training use uatr. Otherwise use standard")
 parser.add_argument("--predictor", default=None, type=str, choices=["local", "cluster"])
 parser.add_argument("--save_model", default=None, type=str, choices=["True", "False"])
-
+parser.add_argument("--load", default=None, type=str, choices=["True", "False"])
 
 #  Training configuration
 parser.add_argument("--optimizer", type=str, default="sgd", choices=["sgd", "adam"], help="Choose optimizer.")

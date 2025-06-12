@@ -13,7 +13,8 @@ def build_train_dataloader(args):
 
     if dataset_name == "cifar10":
         train_dataset = CIFAR10(root='./data/dataset', train=True, download=False,
-                                transform=transforms.Compose([transforms.ToTensor()]))
+                                transform=transforms.Compose([transforms.ToTensor(), transforms.Resize((224,224))]))
+
     elif dataset_name == "cifar100":
         train_transform = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
@@ -42,7 +43,6 @@ def build_train_dataloader(args):
         raise NotImplementedError
     label2class = train_dataset.classes
     args.label2class = np.array(label2class)
-
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     return train_loader
 
@@ -54,7 +54,7 @@ def build_cal_test_loader(args):
         val_dataset = CIFAR10(root='./data/dataset', train=False, download=True,
                                  transform=transforms.Compose([transforms.Resize(224), transforms.ToTensor()]))
         label2class = val_dataset.classes
-        val_dataset = Subset(val_dataset, range(0, 20))
+        val_dataset = Subset(val_dataset, range(0, 100))
     elif dataset_name == "cifar100":
 
         val_transform = transforms.Compose([
