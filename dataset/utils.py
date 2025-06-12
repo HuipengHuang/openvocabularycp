@@ -43,6 +43,7 @@ def build_train_dataloader(args):
         raise NotImplementedError
     label2class = train_dataset.classes
     args.label2class = np.array(label2class)
+    train_dataset = Subset(train_dataset, indices=list(range(0, 10)))
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     return train_loader
 

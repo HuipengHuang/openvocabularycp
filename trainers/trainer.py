@@ -31,7 +31,7 @@ class Trainer:
         logits_per_image, logits_per_text = self.model(images, self.text_inputs)
 
         image_loss = self.loss_function(logits_per_image, labels)
-        text_loss = self.loss_function(logits_per_text, labels)
+        text_loss = self.loss_function(logits_per_text.T, labels)
 
         loss = (image_loss + text_loss) / 2
         # Backward pass
