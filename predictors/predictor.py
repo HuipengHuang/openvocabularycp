@@ -13,6 +13,7 @@ class Predictor:
         self.threshold = None
         self.alpha = args.alpha
         self.device = next(model.parameters()).device
+        print(self.device)
         self.args = args
         self.template_embedding = self.model.token_embedding(clip.tokenize([f"A photo of a dog"]).to("cuda"))
         self.batch_template_embedding = torch.cat([self.template_embedding for _ in range(args.batch_size)])
