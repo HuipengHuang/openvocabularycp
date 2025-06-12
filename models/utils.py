@@ -22,6 +22,7 @@ def build_model(args):
         raise ValueError(f"Unsupported model type: {model_type}")
     if args.load == "True":
         model = load_model(args, model)
+    model = model.to("cuda")
     return model
 
 """def load_model(args, net):
