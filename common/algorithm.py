@@ -40,13 +40,14 @@ def standard(args):
 
 
     train_loader = build_train_dataloader(args)
-    _, test_loader = build_cal_test_loader(args)
 
     trainer = get_trainer(args)
 
     trainer.train(train_loader, args.epochs)
 
+    del train_loader
 
+    _, test_loader = build_cal_test_loader(args)
     result_dict = trainer.predictor.evaluate(test_loader)
 
     for key, value in result_dict.items():
