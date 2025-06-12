@@ -46,7 +46,7 @@ def save_model(args, net):
 
 def load_model(args, model):
     """Properly load CLIP model components"""
-    pattern = os.path.join("./data", f"{args.dataset}_{args.model}*clip*.pt")
+    pattern = os.path.join("./data", f"{args.dataset}_{args.model}_clip0.pth")
     matching_files = glob.glob(pattern)
 
     if not matching_files:
