@@ -2,7 +2,34 @@ import glob
 import os
 import clip
 import torch
-import torchvision.models as models
+from transformers import CLIPProcessor, CLIPModel
+
+MODEL_MAPPING = {
+    "resnet50": "RN50",
+    "resnet101": "RN101",
+    "RN50x4": "RN50x4",
+    "ViT-B/16": "ViT-B/16",
+    "ViT-B/32": "ViT-B/32",
+    "ViT-L/14@336px": "ViT-L/14@336px"
+}
+
+
+def load_finetuned_model(args):
+    model_type = MODEL_MAPPING[args.model]
+
+    # Try to find pre-finetuned models first
+    try:
+        from transformers import CLIPModel
+        hf_model_name = f"clip-imagenet-{model_type.lower().replace('/', '-')}"
+        model = CLIPModel.from_pretrained(hf_model_name)
+        print(f"Loaded pre-finetuned {model_type} from HuggingFace")
+        return model.to(args.device)
+    except:
+        print(f"No pre-finetuned model found, loading base {model_type}")
+        model, _ = clip.load(model_type, device=args.device)
+        if args.load == "True":
+            model = load_model(args, model)
+        return model
 
 def build_model(args):
     model_type = args.model
@@ -23,7 +50,7 @@ def build_model(args):
     if args.load == "True":
         model = load_model(args, model)
     model = model.to("cuda")
-    return model
+    return model, preprocess
 
 """def load_model(args, net):
         p = f"./data/{args.dataset}_{args.model}{0}clip.pth"
@@ -47,40 +74,45 @@ def save_model(args, net):
 
 def load_model(args, model):
     """Properly load CLIP model components"""
-    pattern = os.path.join("./data", f"{args.dataset}_{args.model}_clip0.pth")
-    matching_files = glob.glob(pattern)
-
-    if not matching_files:
-        print(f"No CLIP checkpoint found matching {pattern}")
+    if args.pretrained:
+        model = CLIPModel.from_pretrained("georgesung/clip_vit_b_32_imagenet1k")
         return model
 
-    latest_checkpoint = max(matching_files, key=os.path.getctime)
+    else:
+        pattern = os.path.join("./data", f"{args.dataset}_{args.model}_clip0.pth")
+        matching_files = glob.glob(pattern)
 
-    try:
-        state_dict = torch.load(latest_checkpoint, map_location="cpu", weights_only=False)
+        if not matching_files:
+            print(f"No CLIP checkpoint found matching {pattern}")
+            return model
 
-        # Load visual encoder
-        if 'visual_state_dict' in state_dict:
-            model.visual.load_state_dict(state_dict['visual_state_dict'])
+        latest_checkpoint = max(matching_files, key=os.path.getctime)
 
-        # Load text projection (parameter)
-        if 'text_projection' in state_dict:
-            model.text_projection.data = state_dict['text_projection']
+        try:
+            state_dict = torch.load(latest_checkpoint, map_location="cpu", weights_only=False)
 
-        # Load logit scale
-        if 'logit_scale' in state_dict:
-            model.logit_scale.data = state_dict['logit_scale']
+            # Load visual encoder
+            if 'visual_state_dict' in state_dict:
+                model.visual.load_state_dict(state_dict['visual_state_dict'])
 
-        # Load text encoder if exists
-        if hasattr(model, 'transformer') and 'text_state_dict' in state_dict:
-            model.transformer.load_state_dict(state_dict['text_state_dict'])
+            # Load text projection (parameter)
+            if 'text_projection' in state_dict:
+                model.text_projection.data = state_dict['text_projection']
 
-        print(f"Loaded CLIP model from {latest_checkpoint}")
-        return model
+            # Load logit scale
+            if 'logit_scale' in state_dict:
+                model.logit_scale.data = state_dict['logit_scale']
 
-    except Exception as e:
-        print(f"Error loading CLIP model: {str(e)}")
-        return model
+            # Load text encoder if exists
+            if hasattr(model, 'transformer') and 'text_state_dict' in state_dict:
+                model.transformer.load_state_dict(state_dict['text_state_dict'])
+
+            print(f"Loaded CLIP model from {latest_checkpoint}")
+            return model
+
+        except Exception as e:
+            print(f"Error loading CLIP model: {str(e)}")
+            return model
 
 
 def save_model(args, model):

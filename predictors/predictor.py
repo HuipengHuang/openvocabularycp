@@ -14,7 +14,6 @@ class Predictor:
         self.alpha = args.alpha
         self.device = next(model.parameters()).device
         self.args = args
-        self.label2class = args.label2class
         self.template_embedding = self.model.token_embedding(clip.tokenize([f"A photo of a dog"]).to("cuda"))
         self.batch_template_embedding = torch.cat([self.template_embedding for _ in range(args.batch_size)])
         self.normalized_token_embedding = self.model.token_embedding.weight.data.clone().detach()
@@ -57,7 +56,7 @@ class Predictor:
 
                 v = self.learn_v(images)
 
-                class_name = self.label2class[target.detach().cpu().numpy()]
+                class_name = self.args.label2class[target.detach().cpu().numpy()]
                 class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
 
                 v_class = self.model.token_embedding(class_id)
@@ -113,7 +112,7 @@ class Predictor:
 
                 prediction_set = (score_tensor <= self.threshold).to(torch.int)
 
-                class_name = self.label2class[target.clone().detach().cpu().numpy()]
+                class_name = self.args.label2class[target.clone().detach().cpu().numpy()]
                 class_id = torch.tensor([clip.tokenize(cls).to("cuda")[0, 1] for cls in class_name]).to("cuda")
 
                 total_coverage += torch.sum(prediction_set[torch.arange(self.args.batch_size), class_id]).item()

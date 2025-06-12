@@ -9,12 +9,11 @@ def cp(args):
     set_size_list = []
     coverage_list = []
     for run in range(args.num_runs):
-        cal_loader, test_loader = build_cal_test_loader(args)
-
         trainer = get_trainer(args)
+        cal_loader, test_loader = build_cal_test_loader(args, preprocess=trainer.preprocess)
 
         if args.epochs and args.epochs > 0:
-            train_dataloader = build_train_dataloader(args)
+            train_dataloader = build_train_dataloader(args, preprocess=trainer.preprocess)
             trainer.train(train_dataloader)
 
         trainer.predictor.calibrate(cal_loader)
@@ -37,17 +36,15 @@ def cp(args):
 
 
 def standard(args):
-
-
-    train_loader = build_train_dataloader(args)
-
     trainer = get_trainer(args)
+
+    train_loader = build_train_dataloader(args, preprocess=trainer.preprocess)
 
     trainer.train(train_loader, args.epochs)
 
     del train_loader
 
-    _, test_loader = build_cal_test_loader(args)
+    _, test_loader = build_cal_test_loader(args, preprocess=trainer.preprocess)
     result_dict = trainer.predictor.evaluate(test_loader)
 
     for key, value in result_dict.items():

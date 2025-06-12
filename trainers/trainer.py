@@ -13,16 +13,14 @@ class Trainer:
     def __init__(self, args):
         self.args = args
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = models.utils.build_model(args)
+        self.model, self.preprocess = models.utils.build_model(args)
         self.batch_size = args.batch_size
 
         self.optimizer = get_optimizer(args, self.model)
 
         self.predictor = get_predictor(args, self.model)
-
-        self.num_classes = args.num_classes
         self.loss_function = get_loss_function(args, self.predictor)
-        self.text_inputs = clip.tokenize([f"a photo of a {args.label2class[i]}" for i in range(self.num_classes)]).to("cuda")
+        self.text_inputs = None
 
 
     def train_batch(self, images, labels):
@@ -43,6 +41,9 @@ class Trainer:
 
     def train(self, data_loader, epochs=None):
         self.model.train()
+
+        self.text_inputs = clip.tokenize([f"a photo of a {self.args.label2class[i]}" for i in range(self.args.num_classes)]).to(
+            "cuda")
 
         if epochs is None:
             epochs = self.args.epochs
