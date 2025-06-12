@@ -45,9 +45,9 @@ def save_model(args, net):
 
 
 def load_model(args, model):
-    """Load CLIP model weights from checkpoint."""
-    # Standard CLIP naming: dataset_model[variant]_clip[iter].pth
-    pattern = f"./data/{args.dataset}_{args.model}0clip.pth"
+    """Load CLIP model weights from checkpoint with proper architecture handling"""
+    # Standard CLIP checkpoint naming pattern
+    pattern = os.path.join("./data", f"{args.dataset}_{args.model}*clip*.pth")
     matching_files = glob.glob(pattern)
 
     if not matching_files:
@@ -56,40 +56,60 @@ def load_model(args, model):
 
     # Load most recent checkpoint
     latest_checkpoint = max(matching_files, key=os.path.getctime)
+    print(f"Loading CLIP model from {latest_checkpoint}")
 
     try:
+        # Load state dict to CPU first
         state_dict = torch.load(latest_checkpoint, map_location="cpu")
 
-        # Handle different model architectures
-        if hasattr(model, "visual"):  # Standard CLIP architecture
+        # Handle different CLIP components
+        if hasattr(model, 'visual') and hasattr(model, 'transformer'):
+            # Standard CLIP architecture (ViT or RN50)
             model.load_state_dict(state_dict)
-        elif hasattr(model, "resnet"):  # Custom wrapper with resnet
+        elif hasattr(model, 'visual'):
+            # Custom CLIP implementation with separate visual encoder
+            model.visual.load_state_dict(state_dict['visual_state_dict'])
+            model.text_projection.load_state_dict(state_dict['text_state_dict'])
+            model.logit_scale = state_dict['logit_scale']
+        elif hasattr(model, 'resnet'):
+            # Wrapped ResNet CLIP variant
             model.resnet.load_state_dict(state_dict)
         else:
+            # Generic model loading
             model.load_state_dict(state_dict)
 
-        print(f"Loaded CLIP weights from {latest_checkpoint}")
-        return model.to(args.device)
+        # Move model to target device
+        model = model.to(args.device)
+        print(f"Successfully loaded CLIP model to {args.device}")
+
+        return model
+
     except Exception as e:
-        print(f"Error loading {latest_checkpoint}: {str(e)}")
+        print(f"Error loading CLIP model: {str(e)}")
+        # Return original model if loading fails
         return model
 
 
 def save_model(args, model):
-    """Save CLIP model weights with versioning."""
-    os.makedirs("./data", exist_ok=True)
+    save_dir = "./data"
+    os.makedirs(save_dir, exist_ok=True)
 
-    # Versioned filename: dataset_model[variant]_clip[iter].pth
+    # Separate visual and text encoders
+    state_dict = {
+        'visual_state_dict': model.visual.state_dict(),
+        'text_state_dict': model.text_projection.state_dict(),
+        'logit_scale': model.logit_scale,
+        'args': vars(args)
+    }
+
     version = 0
     while True:
-        save_path = f"./data/{args.dataset}_{args.model}_clip{version}.pth"
+        save_path = os.path.join(save_dir, f"clip_{args.model}_{version}.pt")
         if not os.path.exists(save_path):
             break
         version += 1
 
-    # Save complete model (visual + text encoders)
-    torch.save(model.state_dict(), save_path)
-    print(f"Saved CLIP model to {save_path}")
+    torch.save(state_dict, save_path)
 
 """import os
 from datetime import datetime
