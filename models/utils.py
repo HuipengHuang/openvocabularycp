@@ -56,7 +56,7 @@ def load_model(args, model):
     latest_checkpoint = max(matching_files, key=os.path.getctime)
 
     try:
-        state_dict = torch.load(latest_checkpoint, map_location="cpu")
+        state_dict = torch.load(latest_checkpoint, map_location="cpu", weights_only=False)
 
         # Load visual encoder
         if 'visual_state_dict' in state_dict:
