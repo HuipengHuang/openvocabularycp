@@ -83,32 +83,42 @@ def load_model(args, model):
 
 
 def save_model(args, model):
-    """Properly save CLIP model components"""
-    save_dir = "./data"
-    os.makedirs(save_dir, exist_ok=True)
+    """Save CLIP model with proper directory handling"""
+    # Create the base data directory if it doesn't exist
+    base_dir = "./data"
+    os.makedirs(base_dir, exist_ok=True)
 
-    # Prepare state dictionary for CLIP
+    # Create model-specific directory
+    model_dir = os.path.join(base_dir, f"{args.dataset}_{args.model}")
+    os.makedirs(model_dir, exist_ok=True)
+
+    # Prepare state dictionary
     state_dict = {
         'visual_state_dict': model.visual.state_dict(),
-        'text_projection': model.text_projection.data,  # Save as tensor
+        'text_projection': model.text_projection.data,
         'logit_scale': model.logit_scale.data,
         'args': vars(args)
     }
 
-    # Handle text encoder if exists
+    # Add text encoder if exists
     if hasattr(model, 'transformer'):
         state_dict['text_state_dict'] = model.transformer.state_dict()
 
+    # Find next available version
     version = 0
     while True:
-        save_path = os.path.join(save_dir, f"{args.dataset}_{args.model}_clip{version}.pt")
+        save_path = os.path.join(model_dir, f"clip_{version}.pt")
         if not os.path.exists(save_path):
             break
         version += 1
 
-    torch.save(state_dict, save_path)
-    print(f"Saved CLIP model to {save_path}")
-
+    # Save the model
+    try:
+        torch.save(state_dict, save_path)
+        print(f"Successfully saved model to {save_path}")
+    except Exception as e:
+        print(f"Failed to save model: {str(e)}")
+        raise
 """import os
 from datetime import datetime
 
