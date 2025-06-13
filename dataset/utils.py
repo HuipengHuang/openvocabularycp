@@ -98,7 +98,7 @@ def build_cal_test_loader(args, preprocess=None):
                 transform=val_transform
             )
         label2class = load_label2class(args,"/mnt/sharedata/ssd3/common/datasets/imagenet")
-
+        print(label2class)
     else:
         raise NotImplementedError
 
@@ -113,8 +113,8 @@ def build_cal_test_loader(args, preprocess=None):
         cal_dataset, test_dataset = random_split(val_dataset, [cal_size, test_size])
 
 
-        cal_loader = DataLoader(cal_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True)
+        cal_loader = DataLoader(cal_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=True, pin_memory=True)
 
     return cal_loader, test_loader
 
